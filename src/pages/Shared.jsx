@@ -2,6 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { BUG_TYPE_OPTIONS } from "../constants/bugTypes";
 import { supabase } from "../supabaseClient";
+import {
+  buildEntryPayload,
+  toEntryFormData,
+  validateEntryForm,
+} from "../utils/entryForm";
 
 export default function Shared() {
   const navigate = useNavigate();
@@ -10,6 +15,11 @@ export default function Shared() {
   const [currentUserId, setCurrentUserId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [expandedRepos, setExpandedRepos] = useState({});
+  const [expandedEntries, setExpandedEntries] = useState({});
+  const [editingEntryId, setEditingEntryId] = useState(null);
+  const [inlineFormData, setInlineFormData] = useState(null);
+  const [inlineStatus, setInlineStatus] = useState("");
+  const [inlineSaving, setInlineSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedSeverities, setSelectedSeverities] = useState([]);
   const [selectedBugTypes, setSelectedBugTypes] = useState([]);
@@ -138,6 +148,91 @@ export default function Shared() {
       ...prev,
       [repoName]: !prev[repoName],
     }));
+  }
+
+  function toggleEntry(entryId) {
+    setExpandedEntries((prev) => ({
+      ...prev,
+      [entryId]: !prev[entryId],
+    }));
+
+    if (editingEntryId === entryId) {
+      setEditingEntryId(null);
+      setInlineFormData(null);
+      setInlineStatus("");
+    }
+  }
+
+  function startInlineEdit(entry) {
+    if (entry.user_id !== currentUserId) return;
+
+    setEditingEntryId(entry.id);
+    setInlineFormData(toEntryFormData(entry));
+    setInlineStatus("");
+    setExpandedEntries((prev) => ({
+      ...prev,
+      [entry.id]: true,
+    }));
+  }
+
+  function handleInlineChange(e) {
+    const { name, value } = e.target;
+
+    setInlineFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  }
+
+  function cancelInlineEdit() {
+    setEditingEntryId(null);
+    setInlineFormData(null);
+    setInlineStatus("");
+  }
+
+  async function saveInlineEdit(entryId) {
+    if (!inlineFormData) return;
+
+    setInlineStatus("");
+
+    const validationError = validateEntryForm(inlineFormData);
+    if (validationError) {
+      setInlineStatus(validationError);
+      return;
+    }
+
+    setInlineSaving(true);
+
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+      setInlineStatus("You must be logged in to edit this entry.");
+      setInlineSaving(false);
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("bug_entries")
+      .update(buildEntryPayload(inlineFormData))
+      .eq("id", entryId)
+      .eq("user_id", user.id)
+      .select()
+      .single();
+
+    if (error) {
+      setInlineStatus(`Error: ${error.message}`);
+      setInlineSaving(false);
+      return;
+    }
+
+    setAllEntries((prev) => prev.map((item) => (item.id === entryId ? data : item)));
+    setEditingEntryId(null);
+    setInlineFormData(null);
+    setInlineStatus("");
+    setInlineSaving(false);
   }
 
   function sortEntries(list) {
@@ -370,81 +465,252 @@ export default function Shared() {
         </aside>
 
         <section style={styles.entriesColumn}>
-          {repoKeys.length === 0 ? (
-            <p>No matching entries found.</p>
-          ) : (
-            repoKeys.map((repoKey) => {
-              const isExpanded = !!expandedRepos[repoKey];
-              const repoGroup = groupedEntries[repoKey];
-              const repoEntries = repoGroup.entries;
+          <div style={styles.repositoryBlock}>
+            <div style={styles.repositoryBlockHeader}>Repositories</div>
 
-              return (
-                <div key={repoKey} style={styles.repoShell}>
-                  <div style={styles.repoHeader}>
-                    <div>
-                      <h2 style={styles.repoTitle}>{repoGroup.label}</h2>
-                      <p style={styles.repoCount}>
-                        {repoEntries.length} bug{repoEntries.length !== 1 ? "s" : ""}
-                      </p>
-                    </div>
+            {repoKeys.length === 0 ? (
+              <p style={styles.emptyText}>No matching entries found.</p>
+            ) : (
+              <div style={styles.repositoryList}>
+                {repoKeys.map((repoKey) => {
+                  const isExpanded = !!expandedRepos[repoKey];
+                  const repoGroup = groupedEntries[repoKey];
+                  const repoEntries = repoGroup.entries;
 
-                    <button
-                      onClick={() => toggleRepo(repoKey)}
-                      style={styles.expandButton}
-                    >
-                      {isExpanded ? "Hide" : "Show"}
-                    </button>
-                  </div>
+                  return (
+                    <div key={repoKey} style={styles.repoShell}>
+                      <div style={styles.repoHeader}>
+                        <div>
+                          <h2 style={styles.repoTitle}>{repoGroup.label}</h2>
+                          <p style={styles.repoCount}>
+                            {repoEntries.length} bug{repoEntries.length !== 1 ? "s" : ""}
+                          </p>
+                        </div>
 
-                  {isExpanded && (
-                    <div style={styles.entryList}>
-                      {repoEntries.map((entry) => {
-                        const isOwn = entry.user_id === currentUserId;
-                        return (
-                          <div
-                            key={entry.id}
-                            style={styles.entryCard}
-                            onClick={() => navigate(`/entry/${entry.id}`)}
-                          >
-                            <div style={styles.entryTopRow}>
-                              <div>
-                                <h3 style={styles.entryName}>
-                                  {entry.entry_name || "Untitled Entry"}
-                                </h3>
-                                {!isOwn && (
-                                  <p style={styles.entryCreator}>
-                                    Created by {creatorNamesById[entry.user_id] || "another user"}
-                                  </p>
+                        <button
+                          onClick={() => toggleRepo(repoKey)}
+                          style={styles.expandButton}
+                          type="button"
+                        >
+                          {isExpanded ? "Hide" : "Show"}
+                        </button>
+                      </div>
+
+                      {isExpanded && (
+                        <div style={styles.entryList}>
+                          {repoEntries.map((entry) => {
+                            const isEntryExpanded = !!expandedEntries[entry.id];
+                            const isEditingEntry = editingEntryId === entry.id;
+                            const isOwn = entry.user_id === currentUserId;
+
+                            return (
+                              <div key={entry.id} style={styles.entryShell}>
+                                <div style={styles.entryHeader}>
+                                  <div>
+                                    <h3 style={styles.entryName}>
+                                      {entry.entry_name || "Untitled Entry"}
+                                    </h3>
+                                    <p style={styles.entryMetaInline}>
+                                      {entry.severity || "No Severity"} | {entry.bug_type || "No Bug Type"}
+                                    </p>
+                                  </div>
+
+                                  <button
+                                    onClick={() => toggleEntry(entry.id)}
+                                    style={styles.entryToggleButton}
+                                    type="button"
+                                  >
+                                    {isEntryExpanded ? "Hide" : "Show"}
+                                  </button>
+                                </div>
+
+                                {isEntryExpanded && (
+                                  <div style={styles.entryMetaBlock}>
+                                    <div style={styles.metaGrid}>
+                                      <div style={styles.metaItem}>
+                                        <div style={styles.metaLabel}>Entry Name</div>
+                                        {isEditingEntry && inlineFormData ? (
+                                          <input
+                                            type="text"
+                                            name="entry_name"
+                                            value={inlineFormData.entry_name}
+                                            onChange={handleInlineChange}
+                                            style={styles.metaControl}
+                                          />
+                                        ) : (
+                                          <div style={styles.metaValue}>{entry.entry_name || "Untitled Entry"}</div>
+                                        )}
+                                      </div>
+
+                                      <div style={styles.metaItem}>
+                                        <div style={styles.metaLabel}>Created By</div>
+                                        <div style={styles.metaValue}>
+                                          {entry.user_id === currentUserId
+                                            ? "You"
+                                            : creatorNamesById[entry.user_id] || "another user"}
+                                        </div>
+                                      </div>
+
+                                      <div style={styles.metaItem}>
+                                        <div style={styles.metaLabel}>Bug Type</div>
+                                        {isEditingEntry && inlineFormData ? (
+                                          <select
+                                            name="bug_type"
+                                            value={inlineFormData.bug_type}
+                                            onChange={handleInlineChange}
+                                            style={styles.metaControl}
+                                          >
+                                            <option value="">Select bug type</option>
+                                            {BUG_TYPE_OPTIONS.map((bugType) => (
+                                              <option key={bugType} value={bugType}>
+                                                {bugType}
+                                              </option>
+                                            ))}
+                                          </select>
+                                        ) : (
+                                          <div style={styles.metaValue}>{entry.bug_type || "Not provided"}</div>
+                                        )}
+                                      </div>
+
+                                      <div style={styles.metaItem}>
+                                        <div style={styles.metaLabel}>Severity</div>
+                                        {isEditingEntry && inlineFormData ? (
+                                          <select
+                                            name="severity"
+                                            value={inlineFormData.severity}
+                                            onChange={handleInlineChange}
+                                            style={styles.metaControl}
+                                          >
+                                            <option value="">Select severity</option>
+                                            <option value="Low">Low</option>
+                                            <option value="Medium">Medium</option>
+                                            <option value="High">High</option>
+                                            <option value="Critical">Critical</option>
+                                          </select>
+                                        ) : (
+                                          <div style={styles.metaValue}>{entry.severity || "Not provided"}</div>
+                                        )}
+                                      </div>
+
+                                      <div style={styles.metaItem}>
+                                        <div style={styles.metaLabel}>Created</div>
+                                        <div style={styles.metaValue}>
+                                          {entry.created_at
+                                            ? new Date(entry.created_at).toLocaleDateString()
+                                            : "Unknown"}
+                                        </div>
+                                      </div>
+
+                                      <div style={styles.metaItem}>
+                                        <div style={styles.metaLabel}>Repository URL</div>
+                                        {isEditingEntry && inlineFormData ? (
+                                          <input
+                                            type="url"
+                                            name="repo_url"
+                                            value={inlineFormData.repo_url}
+                                            onChange={handleInlineChange}
+                                            style={styles.metaControl}
+                                          />
+                                        ) : (
+                                          <div style={styles.metaValue}>{entry.repo_url || "Not provided"}</div>
+                                        )}
+                                      </div>
+
+                                      <div style={styles.metaItemFull}>
+                                        <div style={styles.metaLabel}>Bug Description</div>
+                                        {isEditingEntry && inlineFormData ? (
+                                          <textarea
+                                            name="bug_description"
+                                            value={inlineFormData.bug_description}
+                                            onChange={handleInlineChange}
+                                            style={styles.metaTextarea}
+                                          />
+                                        ) : (
+                                          <div style={styles.metaValue}>
+                                            {entry.bug_description || "No description provided."}
+                                          </div>
+                                        )}
+                                      </div>
+
+                                      <div style={styles.metaItemFull}>
+                                        <div style={styles.metaLabel}>Code Snippet</div>
+                                        {isEditingEntry && inlineFormData ? (
+                                          <textarea
+                                            name="code_snippet"
+                                            value={inlineFormData.code_snippet}
+                                            onChange={handleInlineChange}
+                                            style={styles.metaTextarea}
+                                          />
+                                        ) : (
+                                          <div style={styles.metaValue}>{entry.code_snippet || "Not provided"}</div>
+                                        )}
+                                      </div>
+
+                                      <div style={styles.metaItemFull}>
+                                        <div style={styles.metaLabel}>Extra Details</div>
+                                        {isEditingEntry && inlineFormData ? (
+                                          <textarea
+                                            name="extra_details"
+                                            value={inlineFormData.extra_details}
+                                            onChange={handleInlineChange}
+                                            style={styles.metaTextarea}
+                                          />
+                                        ) : (
+                                          <div style={styles.metaValue}>{entry.extra_details || "Not provided"}</div>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    <div style={styles.metaActions}>
+                                      {isOwn ? (
+                                        isEditingEntry && inlineFormData ? (
+                                          <>
+                                            <button
+                                              type="button"
+                                              onClick={cancelInlineEdit}
+                                              style={styles.secondaryButton}
+                                            >
+                                              Cancel
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => saveInlineEdit(entry.id)}
+                                              style={styles.manageButton}
+                                              disabled={inlineSaving}
+                                            >
+                                              {inlineSaving ? "Saving..." : "Save Changes"}
+                                            </button>
+                                          </>
+                                        ) : (
+                                          <button
+                                            type="button"
+                                            onClick={() => startInlineEdit(entry)}
+                                            style={styles.manageButton}
+                                          >
+                                            Edit
+                                          </button>
+                                        )
+                                      ) : (
+                                        <span style={styles.readOnlyText}>Read only</span>
+                                      )}
+                                    </div>
+
+                                    {isEditingEntry && inlineStatus && (
+                                      <p style={styles.inlineStatus}>{inlineStatus}</p>
+                                    )}
+                                  </div>
                                 )}
                               </div>
-                              <span style={styles.entrySeverity}>
-                                {entry.severity || "No Severity"}
-                              </span>
-                            </div>
-
-                            <p style={styles.entryType}>
-                              {entry.bug_type || "No Bug Type"}
-                            </p>
-
-                            <p style={styles.entryDescription}>
-                              {entry.bug_description || "No description provided."}
-                            </p>
-
-                            <p style={styles.entryDate}>
-                              Created:{" "}
-                              {entry.created_at
-                                ? new Date(entry.created_at).toLocaleDateString()
-                                : "Unknown"}
-                            </p>
-                          </div>
-                        );
-                      })}
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-              );
-            })
-          )}
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </section>
       </div>
     </div>
@@ -502,6 +768,27 @@ const styles = {
     flex: 1,
     minWidth: 0,
   },
+  repositoryBlock: {
+    border: "1px solid #ddd",
+    borderRadius: "14px",
+    backgroundColor: "#fff",
+    padding: "16px",
+    display: "grid",
+    gap: "14px",
+  },
+  repositoryBlockHeader: {
+    fontSize: "22px",
+    fontWeight: 700,
+    color: "#222",
+  },
+  repositoryList: {
+    display: "grid",
+    gap: "14px",
+  },
+  emptyText: {
+    margin: 0,
+    color: "#666",
+  },
   searchInput: {
     width: "100%",
     padding: "10px",
@@ -511,9 +798,8 @@ const styles = {
   repoShell: {
     border: "1px solid #ddd",
     borderRadius: "12px",
-    marginBottom: "18px",
     overflow: "hidden",
-    backgroundColor: "#fff",
+    backgroundColor: "#f8fafc",
   },
   repoHeader: {
     display: "flex",
@@ -540,18 +826,18 @@ const styles = {
   },
   entryList: {
     padding: "16px",
-    display: "flex",
-    flexDirection: "column",
+    display: "grid",
     gap: "12px",
   },
-  entryCard: {
+  entryShell: {
     border: "1px solid #e3e3e3",
     borderRadius: "10px",
     padding: "14px",
-    cursor: "pointer",
-    transition: "0.2s",
+    backgroundColor: "#fff",
+    display: "grid",
+    gap: "10px",
   },
-  entryTopRow: {
+  entryHeader: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "flex-start",
@@ -559,29 +845,121 @@ const styles = {
   },
   entryName: {
     margin: 0,
+    fontSize: "17px",
   },
-  entryCreator: {
-    margin: "4px 0 0 0",
-    fontSize: "12px",
-    color: "#999",
-    fontStyle: "italic",
-  },
-  entrySeverity: {
+  entryMetaInline: {
+    margin: "6px 0 0 0",
     fontSize: "13px",
     color: "#555",
-    whiteSpace: "nowrap",
   },
-  entryType: {
-    margin: "8px 0 6px 0",
-    fontWeight: "500",
+  entryToggleButton: {
+    padding: "8px 12px",
+    borderRadius: "8px",
+    border: "1px solid #cbd5e1",
+    cursor: "pointer",
+    backgroundColor: "#fff",
+    color: "#1f2937",
+    fontWeight: 600,
   },
-  entryDescription: {
-    margin: "0 0 8px 0",
-    color: "#444",
+  entryMetaBlock: {
+    borderTop: "1px solid #e2e8f0",
+    paddingTop: "12px",
+    display: "grid",
+    gap: "12px",
   },
-  entryDate: {
+  metaGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    gap: "10px",
+  },
+  metaItem: {
+    border: "1px solid #e5e7eb",
+    borderRadius: "8px",
+    padding: "10px",
+    backgroundColor: "#f8fafc",
+  },
+  metaItemFull: {
+    border: "1px solid #e5e7eb",
+    borderRadius: "8px",
+    padding: "10px",
+    backgroundColor: "#f8fafc",
+    gridColumn: "1 / -1",
+  },
+  metaLabel: {
+    fontSize: "12px",
+    fontWeight: 700,
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: "6px",
+  },
+  metaValue: {
     margin: 0,
+    fontSize: "14px",
+    color: "#1f2937",
+    lineHeight: 1.4,
+    wordBreak: "break-word",
+    whiteSpace: "pre-wrap",
+  },
+  metaControl: {
+    width: "100%",
+    border: "1px solid #e5e7eb",
+    borderRadius: "8px",
+    padding: "10px",
+    fontSize: "14px",
+    color: "#1f2937",
+    backgroundColor: "#f8fafc",
+    outline: "none",
+    fontFamily: "inherit",
+    lineHeight: 1.4,
+  },
+  metaTextarea: {
+    width: "100%",
+    minHeight: "110px",
+    resize: "vertical",
+    border: "1px solid #e5e7eb",
+    borderRadius: "8px",
+    padding: "10px",
+    fontSize: "14px",
+    color: "#1f2937",
+    backgroundColor: "#f8fafc",
+    outline: "none",
+    fontFamily: "inherit",
+    lineHeight: 1.4,
+  },
+  metaActions: {
+    display: "flex",
+    justifyContent: "flex-end",
+    flexWrap: "wrap",
+    gap: "8px",
+  },
+  secondaryButton: {
+    border: "1px solid #d1d5db",
+    borderRadius: "8px",
+    padding: "10px 14px",
+    cursor: "pointer",
+    backgroundColor: "#fff",
+    color: "#1f2937",
+    fontWeight: 600,
+  },
+  manageButton: {
+    border: "none",
+    borderRadius: "8px",
+    padding: "10px 14px",
+    cursor: "pointer",
+    backgroundColor: "#26a036",
+    color: "#fff",
+    fontWeight: 700,
+  },
+  readOnlyText: {
+    margin: 0,
+    color: "#64748b",
     fontSize: "13px",
-    color: "#777",
+    fontWeight: 600,
+  },
+  inlineStatus: {
+    margin: 0,
+    color: "#b91c1c",
+    fontSize: "13px",
   },
 };

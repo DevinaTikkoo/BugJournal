@@ -1,18 +1,34 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+// import ReCAPTCHA from "react-google-recaptcha";
 import { supabase } from "../supabaseClient";
 import bugBlotzLogo from "../components/BugBlotzLogo.png";
 
 export default function Login() {
   const [identifier, setIdentifier] = useState(""); // username OR email
   const [password, setPassword] = useState("");
+  // const [recaptchaToken, setRecaptchaToken] = useState("");
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
+  // const recaptchaRef = useRef(null);
   const navigate = useNavigate();
+  // const recaptchaSiteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY;
 
   async function handleLogin(e) {
     e.preventDefault();
     setStatus("");
+
+    // Temporarily disabled reCAPTCHA checks.
+    // if (!recaptchaSiteKey) {
+    //   setStatus("reCAPTCHA is not configured. Add VITE_RECAPTCHA_SITE_KEY to your environment.");
+    //   return;
+    // }
+
+    // if (!recaptchaToken) {
+    //   setStatus("Please complete the reCAPTCHA challenge.");
+    //   return;
+    // }
+
     setLoading(true);
 
     try {
@@ -54,6 +70,8 @@ export default function Login() {
       }
 
       setStatus("Success! Redirecting...");
+      // recaptchaRef.current?.reset();
+      // setRecaptchaToken("");
       navigate("/dashboard");
     } catch (err) {
       setStatus(`Error: ${err?.message || "Login failed."}`);
@@ -89,6 +107,19 @@ export default function Login() {
         <div style={{ textAlign: "right" }}>
           <Link to="/forgot-password" style={forgotStyle}>Forgot password?</Link>
         </div>
+
+        {/* <div style={captchaWrap}>
+          <ReCAPTCHA
+            ref={recaptchaRef}
+            sitekey={recaptchaSiteKey || ""}
+            onChange={(token) => {
+              setRecaptchaToken(token || "");
+              if (status) setStatus("");
+            }}
+            onExpired={() => setRecaptchaToken("")}
+            onErrored={() => setStatus("reCAPTCHA failed to load. Please refresh and try again.")}
+          />
+        </div> */}
 
         <button
           type="submit"

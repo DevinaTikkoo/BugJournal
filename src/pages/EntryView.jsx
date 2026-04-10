@@ -2,23 +2,19 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { BUG_TYPE_OPTIONS } from "../constants/bugTypes";
 import { supabase } from "../supabaseClient";
-
-const emptyForm = {
-  entry_name: "",
-  bug_description: "",
-  extra_details: "",
-  repo_url: "",
-  bug_type: "",
-  severity: "",
-  code_snippet: "",
-};
+import {
+  buildEntryPayload,
+  emptyEntryForm,
+  toEntryFormData,
+  validateEntryForm,
+} from "../utils/entryForm";
 
 export default function EntryView() {
   const { id } = useParams();
   const navigate = useNavigate();
 
   const [entry, setEntry] = useState(null);
-  const [formData, setFormData] = useState(emptyForm);
+  const [formData, setFormData] = useState({ ...emptyEntryForm });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -34,21 +30,6 @@ export default function EntryView() {
       ...prev,
       [name]: value,
     }));
-  }
-
-  function extractRepoName(repoUrl) {
-    if (!repoUrl) return null;
-
-    try {
-      const parsed = new URL(repoUrl.trim());
-      const segments = parsed.pathname.split("/").filter(Boolean);
-      const lastSegment = segments[segments.length - 1] || "";
-      const cleanSegment = lastSegment.replace(/\.git$/i, "");
-      const normalized = cleanSegment.replace(/-/g, "").trim();
-      return normalized || null;
-    } catch {
-      return null;
-    }
   }
 
   async function fetchEntry() {
@@ -79,33 +60,16 @@ export default function EntryView() {
     }
 
     setEntry(data);
-    setFormData({
-      entry_name: data.entry_name || "",
-      bug_description: data.bug_description || data.bug_details || data.extra_details || "",
-      extra_details: data.extra_details || "",
-      repo_url: data.repo_url || "",
-      bug_type: data.bug_type || "",
-      severity: data.severity || "",
-      code_snippet: data.code_snippet || "",
-    });
+    setFormData(toEntryFormData(data));
     setLoading(false);
   }
 
   async function saveEntry() {
     setStatus("");
 
-    if (!formData.entry_name.trim()) {
-      setStatus("Please enter an entry name.");
-      return;
-    }
-
-    if (!formData.bug_type.trim()) {
-      setStatus("Please select a bug type.");
-      return;
-    }
-
-    if (!formData.severity.trim()) {
-      setStatus("Please select a severity.");
+    const validationError = validateEntryForm(formData);
+    if (validationError) {
+      setStatus(validationError);
       return;
     }
 
@@ -122,16 +86,7 @@ export default function EntryView() {
       return;
     }
 
-    const payload = {
-      entry_name: formData.entry_name,
-      bug_description: formData.bug_description || null,
-      extra_details: formData.extra_details || null,
-      bug_type: formData.bug_type,
-      severity: formData.severity,
-      repo_name: extractRepoName(formData.repo_url),
-      repo_url: formData.repo_url || null,
-      code_snippet: formData.code_snippet || null,
-    };
+    const payload = buildEntryPayload(formData);
 
     const { data, error } = await supabase
       .from("bug_entries")
@@ -148,15 +103,7 @@ export default function EntryView() {
     }
 
     setEntry(data);
-    setFormData({
-      entry_name: data.entry_name || "",
-      bug_description: data.bug_description || data.bug_details || data.extra_details || "",
-      extra_details: data.extra_details || "",
-      repo_url: data.repo_url || "",
-      bug_type: data.bug_type || "",
-      severity: data.severity || "",
-      code_snippet: data.code_snippet || "",
-    });
+    setFormData(toEntryFormData(data));
     setIsEditing(false);
     setStatus("Entry updated successfully!");
     setSaving(false);
@@ -165,15 +112,7 @@ export default function EntryView() {
   function cancelEdit() {
     if (!entry) return;
 
-    setFormData({
-      entry_name: entry.entry_name || "",
-      bug_description: entry.bug_description || entry.bug_details || entry.extra_details || "",
-      extra_details: entry.extra_details || "",
-      repo_url: entry.repo_url || "",
-      bug_type: entry.bug_type || "",
-      severity: entry.severity || "",
-      code_snippet: entry.code_snippet || "",
-    });
+    setFormData(toEntryFormData(entry));
     setIsEditing(false);
     setStatus("");
   }

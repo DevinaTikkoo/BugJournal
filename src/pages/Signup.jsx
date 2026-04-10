@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+// import ReCAPTCHA from "react-google-recaptcha";
 import { supabase } from "../supabaseClient";
 import bugBlotzLogo from "../components/BugBlotzLogo.png";
 
@@ -8,9 +9,12 @@ export default function Signup() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  // const [recaptchaToken, setRecaptchaToken] = useState("");
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
+  // const recaptchaRef = useRef(null);
   const navigate = useNavigate();
+  // const recaptchaSiteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY;
 
   async function handleSignup(e) {
     e.preventDefault();
@@ -28,6 +32,17 @@ export default function Signup() {
       setStatus("Username must be at least 3 characters.");
       return;
     }
+
+    // Temporarily disabled reCAPTCHA checks.
+    // if (!recaptchaSiteKey) {
+    //   setStatus("reCAPTCHA is not configured. Add VITE_RECAPTCHA_SITE_KEY to your environment.");
+    //   return;
+    // }
+
+    // if (!recaptchaToken) {
+    //   setStatus("Please complete the reCAPTCHA challenge.");
+    //   return;
+    // }
 
     setLoading(true);
     setStatus("Creating account...");
@@ -59,10 +74,14 @@ export default function Signup() {
 
       if (!data.session) {
         setStatus("Success! Check your email to confirm your account.");
+        // recaptchaRef.current?.reset();
+        // setRecaptchaToken("");
         return;
       }
 
       setStatus("Success! Redirecting...");
+      // recaptchaRef.current?.reset();
+      // setRecaptchaToken("");
       navigate("/dashboard");
     } catch (err) {
       setStatus(`Error: ${err?.message || "Signup failed."}`);
@@ -115,6 +134,19 @@ export default function Signup() {
           required
           autoComplete="new-password"
         />
+
+        {/* <div style={captchaWrap}>
+          <ReCAPTCHA
+            ref={recaptchaRef}
+            sitekey={recaptchaSiteKey || ""}
+            onChange={(token) => {
+              setRecaptchaToken(token || "");
+              if (status) setStatus("");
+            }}
+            onExpired={() => setRecaptchaToken("")}
+            onErrored={() => setStatus("reCAPTCHA failed to load. Please refresh and try again.")}
+          />
+        </div> */}
 
         <button
           type="submit"
