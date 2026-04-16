@@ -22,3 +22,11 @@ Add this variable to your `.env` file for local development:
 VITE_RECAPTCHA_SITE_KEY=your_site_key_here
 
 This key is required by the login and signup forms before they can submit.
+
+## Shared Entry Comments Setup
+
+To enable comments in Shared Entries, run the SQL in:
+
+`supabase/comments_schema.sql`
+
+It creates the `bug_entry_comments` table, indexes, and RLS policies.

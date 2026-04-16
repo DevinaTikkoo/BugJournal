@@ -25,6 +25,7 @@ export default function Entries() {
   const [selectedEntryIds, setSelectedEntryIds] = useState([]);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [bulkStatus, setBulkStatus] = useState("");
+  const [deletingEntryId, setDeletingEntryId] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [sortOption, setSortOption] = useState("newest");
   const [selectedSeverities, setSelectedSeverities] = useState([]);
@@ -292,6 +293,52 @@ export default function Entries() {
     setIsSelectionMode(false);
     setBulkStatus("Selected entries deleted.");
     setBulkDeleting(false);
+  }
+
+  async function deleteEntry(entryId) {
+    const confirmDelete = window.confirm("Delete this entry?");
+    if (!confirmDelete) return;
+
+    setDeletingEntryId(entryId);
+
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+      setDeletingEntryId(null);
+      window.alert("You must be logged in to delete this entry.");
+      return;
+    }
+
+    const { error } = await supabase
+      .from("bug_entries")
+      .delete()
+      .eq("id", entryId)
+      .eq("user_id", user.id);
+
+    if (error) {
+      setDeletingEntryId(null);
+      window.alert(`Error: ${error.message}`);
+      return;
+    }
+
+    setEntries((prev) => prev.filter((entry) => entry.id !== entryId));
+    setSelectedEntryIds((prev) => prev.filter((id) => id !== entryId));
+    setExpandedEntries((prev) => {
+      const next = { ...prev };
+      delete next[entryId];
+      return next;
+    });
+
+    if (editingEntryId === entryId) {
+      setEditingEntryId(null);
+      setInlineFormData(null);
+      setInlineStatus("");
+    }
+
+    setDeletingEntryId(null);
   }
 
   function sortEntries(list) {
@@ -858,13 +905,24 @@ export default function Entries() {
                                           </button>
                                         </>
                                       ) : (
-                                        <button
-                                          type="button"
-                                          onClick={() => startInlineEdit(entry)}
-                                          style={styles.manageButton}
-                                        >
-                                          Edit
-                                        </button>
+                                        <>
+                                          <button
+                                            type="button"
+                                            onClick={() => startInlineEdit(entry)}
+                                            style={styles.manageButton}
+                                            disabled={deletingEntryId === entry.id}
+                                          >
+                                            Edit
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => deleteEntry(entry.id)}
+                                            style={styles.deleteEntryButton}
+                                            disabled={deletingEntryId === entry.id}
+                                          >
+                                            {deletingEntryId === entry.id ? "Deleting..." : "Delete"}
+                                          </button>
+                                        </>
                                       )}
                                     </div>
 
@@ -1148,6 +1206,15 @@ const styles = {
     padding: "10px 14px",
     cursor: "pointer",
     backgroundColor: "#26a036",
+    color: "#fff",
+    fontWeight: 700,
+  },
+  deleteEntryButton: {
+    border: "none",
+    borderRadius: "8px",
+    padding: "10px 14px",
+    cursor: "pointer",
+    backgroundColor: "#b91c1c",
     color: "#fff",
     fontWeight: 700,
   },

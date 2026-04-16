@@ -26,10 +26,30 @@ export default function Shared() {
   const [selectedUsers, setSelectedUsers] = useState([]);
   const [creatorNamesById, setCreatorNamesById] = useState({});
   const [sortOption, setSortOption] = useState("newest");
+  const [commentsByEntryId, setCommentsByEntryId] = useState({});
+  const [commentDraftByEntryId, setCommentDraftByEntryId] = useState({});
+  const [commentSavingByEntryId, setCommentSavingByEntryId] = useState({});
+  const [commentStatusByEntryId, setCommentStatusByEntryId] = useState({});
+  const [commentAuthorNamesById, setCommentAuthorNamesById] = useState({});
 
   useEffect(() => {
     fetchSharedEntries();
   }, []);
+
+  function formatDateTime(value) {
+    if (!value) return "Unknown";
+
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return "Unknown";
+
+    return parsed.toLocaleString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  }
 
   function normalizeRepositoryKey(entry) {
     const rawUrl = entry?.repo_url?.trim();
@@ -140,7 +160,167 @@ export default function Shared() {
       setCreatorNamesById({});
     }
 
+    await fetchCommentsForEntries(combinedEntries);
+
     setLoading(false);
+  }
+
+  async function fetchCommentsForEntries(entriesList) {
+    const entryIds = [...new Set((entriesList || []).map((entry) => entry.id).filter(Boolean))];
+
+    if (entryIds.length === 0) {
+      setCommentsByEntryId({});
+      return;
+    }
+
+    const initialMap = {};
+    entryIds.forEach((entryId) => {
+      initialMap[entryId] = [];
+    });
+
+    const { data: comments, error: commentsErr } = await supabase
+      .from("bug_entry_comments")
+      .select("id, entry_id, user_id, body, created_at")
+      .in("entry_id", entryIds)
+      .order("created_at", { ascending: true });
+
+    if (commentsErr) {
+      console.error("Error fetching comments:", commentsErr);
+      setCommentsByEntryId(initialMap);
+      return;
+    }
+
+    (comments || []).forEach((comment) => {
+      if (!comment?.entry_id) return;
+      if (!initialMap[comment.entry_id]) initialMap[comment.entry_id] = [];
+      initialMap[comment.entry_id].push(comment);
+    });
+
+    setCommentsByEntryId(initialMap);
+
+    const commentUserIds = [
+      ...new Set((comments || []).map((comment) => comment.user_id).filter(Boolean)),
+    ];
+
+    if (commentUserIds.length === 0) return;
+
+    const { data: commentProfiles, error: commentProfilesErr } = await supabase
+      .from("profiles")
+      .select("id, username")
+      .in("id", commentUserIds);
+
+    if (commentProfilesErr || !Array.isArray(commentProfiles)) return;
+
+    const nameMap = {};
+    commentProfiles.forEach((profile) => {
+      if (!profile?.id) return;
+      nameMap[profile.id] = profile.username || "another user";
+    });
+
+    setCommentAuthorNamesById((prev) => ({
+      ...prev,
+      ...nameMap,
+    }));
+  }
+
+  function handleCommentDraftChange(entryId, value) {
+    setCommentDraftByEntryId((prev) => ({
+      ...prev,
+      [entryId]: value,
+    }));
+  }
+
+  async function addComment(entryId) {
+    const body = (commentDraftByEntryId[entryId] || "").trim();
+
+    if (!body) {
+      setCommentStatusByEntryId((prev) => ({
+        ...prev,
+        [entryId]: "Comment cannot be empty.",
+      }));
+      return;
+    }
+
+    setCommentSavingByEntryId((prev) => ({
+      ...prev,
+      [entryId]: true,
+    }));
+
+    setCommentStatusByEntryId((prev) => ({
+      ...prev,
+      [entryId]: "",
+    }));
+
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+      setCommentSavingByEntryId((prev) => ({
+        ...prev,
+        [entryId]: false,
+      }));
+      setCommentStatusByEntryId((prev) => ({
+        ...prev,
+        [entryId]: "You must be logged in to comment.",
+      }));
+      return;
+    }
+
+    const { data: inserted, error: insertErr } = await supabase
+      .from("bug_entry_comments")
+      .insert([
+        {
+          entry_id: entryId,
+          user_id: user.id,
+          body,
+        },
+      ])
+      .select("id, entry_id, user_id, body, created_at")
+      .single();
+
+    if (insertErr || !inserted) {
+      setCommentSavingByEntryId((prev) => ({
+        ...prev,
+        [entryId]: false,
+      }));
+      setCommentStatusByEntryId((prev) => ({
+        ...prev,
+        [entryId]: `Error: ${insertErr?.message || "Unable to post comment."}`,
+      }));
+      return;
+    }
+
+    setCommentsByEntryId((prev) => ({
+      ...prev,
+      [entryId]: [...(prev[entryId] || []), inserted],
+    }));
+
+    if (!commentAuthorNamesById[user.id]) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("id, username")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (profile?.id) {
+        setCommentAuthorNamesById((prev) => ({
+          ...prev,
+          [profile.id]: profile.username || "You",
+        }));
+      }
+    }
+
+    setCommentDraftByEntryId((prev) => ({
+      ...prev,
+      [entryId]: "",
+    }));
+
+    setCommentSavingByEntryId((prev) => ({
+      ...prev,
+      [entryId]: false,
+    }));
   }
 
   function toggleRepo(repoName) {
@@ -502,6 +682,10 @@ export default function Shared() {
                             const isEntryExpanded = !!expandedEntries[entry.id];
                             const isEditingEntry = editingEntryId === entry.id;
                             const isOwn = entry.user_id === currentUserId;
+                            const entryComments = commentsByEntryId[entry.id] || [];
+                            const commentDraft = commentDraftByEntryId[entry.id] || "";
+                            const commentSaving = !!commentSavingByEntryId[entry.id];
+                            const commentStatus = commentStatusByEntryId[entry.id] || "";
 
                             return (
                               <div key={entry.id} style={styles.entryShell}>
@@ -693,6 +877,56 @@ export default function Shared() {
                                       ) : (
                                         <span style={styles.readOnlyText}>Read only</span>
                                       )}
+                                    </div>
+
+                                    <div style={styles.commentSection}>
+                                      <div style={styles.commentTitle}>Comments</div>
+
+                                      {entryComments.length === 0 ? (
+                                        <p style={styles.commentEmpty}>No comments yet.</p>
+                                      ) : (
+                                        <div style={styles.commentList}>
+                                          {entryComments.map((comment) => {
+                                            const authorName = comment.user_id === currentUserId
+                                              ? "You"
+                                              : commentAuthorNamesById[comment.user_id] || "another user";
+
+                                            return (
+                                              <div key={comment.id} style={styles.commentItem}>
+                                                <div style={styles.commentHeader}>
+                                                  <span style={styles.commentAuthor}>{authorName}</span>
+                                                  <span style={styles.commentDate}>
+                                                    {formatDateTime(comment.created_at)}
+                                                  </span>
+                                                </div>
+                                                <p style={styles.commentBody}>{comment.body}</p>
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      )}
+
+                                      <div style={styles.commentComposer}>
+                                        <textarea
+                                          value={commentDraft}
+                                          onChange={(e) => handleCommentDraftChange(entry.id, e.target.value)}
+                                          placeholder="Add a comment..."
+                                          style={styles.commentTextarea}
+                                        />
+                                        <div style={styles.commentActions}>
+                                          <button
+                                            type="button"
+                                            onClick={() => addComment(entry.id)}
+                                            style={styles.manageButton}
+                                            disabled={commentSaving}
+                                          >
+                                            {commentSaving ? "Posting..." : "Post Comment"}
+                                          </button>
+                                        </div>
+                                        {commentStatus && (
+                                          <p style={styles.inlineStatus}>{commentStatus}</p>
+                                        )}
+                                      </div>
                                     </div>
 
                                     {isEditingEntry && inlineStatus && (
@@ -961,5 +1195,81 @@ const styles = {
     margin: 0,
     color: "#b91c1c",
     fontSize: "13px",
+  },
+  commentSection: {
+    borderTop: "1px solid #e2e8f0",
+    paddingTop: "12px",
+    display: "grid",
+    gap: "10px",
+  },
+  commentTitle: {
+    fontSize: "13px",
+    fontWeight: 700,
+    color: "#334155",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  commentEmpty: {
+    margin: 0,
+    fontSize: "13px",
+    color: "#64748b",
+  },
+  commentList: {
+    display: "grid",
+    gap: "8px",
+  },
+  commentItem: {
+    border: "1px solid #e5e7eb",
+    borderRadius: "8px",
+    backgroundColor: "#ffffff",
+    padding: "10px",
+    display: "grid",
+    gap: "6px",
+  },
+  commentHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "10px",
+    flexWrap: "wrap",
+  },
+  commentAuthor: {
+    fontSize: "13px",
+    fontWeight: 700,
+    color: "#1e293b",
+  },
+  commentDate: {
+    fontSize: "12px",
+    color: "#64748b",
+  },
+  commentBody: {
+    margin: 0,
+    color: "#1f2937",
+    fontSize: "14px",
+    lineHeight: 1.45,
+    whiteSpace: "pre-wrap",
+    wordBreak: "break-word",
+  },
+  commentComposer: {
+    display: "grid",
+    gap: "8px",
+  },
+  commentTextarea: {
+    width: "100%",
+    minHeight: "90px",
+    resize: "vertical",
+    border: "1px solid #e5e7eb",
+    borderRadius: "8px",
+    padding: "10px",
+    fontSize: "14px",
+    color: "#1f2937",
+    backgroundColor: "#f8fafc",
+    outline: "none",
+    fontFamily: "inherit",
+    lineHeight: 1.4,
+  },
+  commentActions: {
+    display: "flex",
+    justifyContent: "flex-end",
   },
 };

@@ -1,5 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import {
+  CartesianGrid,
+  Label,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { BUG_TYPE_OPTIONS } from "../constants/bugTypes";
 import { supabase } from "../supabaseClient";
 import {
@@ -19,7 +29,68 @@ export default function Dashboard() {
   const [createFormData, setCreateFormData] = useState({ ...emptyEntryForm });
   const [createStatus, setCreateStatus] = useState("");
   const [createSaving, setCreateSaving] = useState(false);
+  const [chartRange, setChartRange] = useState("month");
   const entryCount = entries.length;
+  const monthlyBugsSeries = useMemo(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const dailyCounts = new Array(daysInMonth).fill(0);
+
+    entries.forEach((entry) => {
+      if (!entry?.created_at) return;
+
+      const createdAt = new Date(entry.created_at);
+      if (Number.isNaN(createdAt.getTime())) return;
+      if (createdAt.getFullYear() !== year || createdAt.getMonth() !== month) return;
+
+      const dayIndex = createdAt.getDate() - 1;
+      dailyCounts[dayIndex] += 1;
+    });
+
+    return dailyCounts.map((count, index) => {
+      const runningTotal = dailyCounts
+        .slice(0, index + 1)
+        .reduce((sum, currentCount) => sum + currentCount, 0);
+
+      return {
+        label: `${month + 1}/${index + 1}`,
+        count,
+        total: runningTotal,
+      };
+    });
+  }, [entries]);
+
+  const yearlyBugsSeries = useMemo(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const monthlyCounts = new Array(12).fill(0);
+
+    entries.forEach((entry) => {
+      if (!entry?.created_at) return;
+
+      const createdAt = new Date(entry.created_at);
+      if (Number.isNaN(createdAt.getTime())) return;
+      if (createdAt.getFullYear() !== year) return;
+
+      monthlyCounts[createdAt.getMonth()] += 1;
+    });
+
+    return monthlyCounts.map((count, index) => {
+      const runningTotal = monthlyCounts
+        .slice(0, index + 1)
+        .reduce((sum, currentCount) => sum + currentCount, 0);
+
+      return {
+        label: `${index + 1}/1`,
+        count,
+        total: runningTotal,
+      };
+    });
+  }, [entries]);
+
+  const activeChartSeries = chartRange === "year" ? yearlyBugsSeries : monthlyBugsSeries;
 
   function toggleEntry(id) {
     setExpandedEntries((prev) => ({
@@ -355,7 +426,92 @@ export default function Dashboard() {
             )}
           </div>
 
-          <div style={graphPlaceholder} />
+          <div style={graphCard}>
+            <div style={graphHeaderRow}>
+              <div style={graphTitle}>Total Bugs Reported</div>
+
+              <div style={graphToggleGroup}>
+                <button
+                  type="button"
+                  style={{
+                    ...graphToggleBtn,
+                    ...(chartRange === "month" ? graphToggleBtnActive : null),
+                  }}
+                  onClick={() => setChartRange("month")}
+                >
+                  This Month
+                </button>
+                <button
+                  type="button"
+                  style={{
+                    ...graphToggleBtn,
+                    ...(chartRange === "year" ? graphToggleBtnActive : null),
+                  }}
+                  onClick={() => setChartRange("year")}
+                >
+                  This Year
+                </button>
+              </div>
+            </div>
+
+            <div style={graphInner}>
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart
+                  data={activeChartSeries}
+                  margin={{ top: 10, right: 14, left: 18, bottom: 16 }}
+                >
+                  <CartesianGrid stroke="#e5e7eb" strokeDasharray="4 4" />
+                  <XAxis
+                    dataKey="label"
+                    tick={{ fontSize: 12, fill: "#6b7280" }}
+                    tickLine={false}
+                    axisLine={{ stroke: "#d1d5db" }}
+                    interval={chartRange === "year" ? 0 : 2}
+                  >
+                    <Label value="Date" position="insideBottom" offset={-2} fill="#374151" />
+                  </XAxis>
+                  <YAxis
+                    allowDecimals={false}
+                    tick={{ fontSize: 12, fill: "#6b7280" }}
+                    tickLine={false}
+                    axisLine={{ stroke: "#d1d5db" }}
+                  >
+                    <Label
+                      value="Number of Bugs Reported"
+                      angle={-90}
+                      position="insideLeft"
+                      offset={2}
+                      fill="#374151"
+                    />
+                  </YAxis>
+                  <Tooltip
+                    formatter={(value) => [`${value}`, "Total Bugs"]}
+                    labelFormatter={(value) => `Date ${value}`}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="total"
+                    stroke="#16a34a"
+                    strokeWidth={3}
+                    dot={(props) => {
+                      if (!props?.payload?.count) return false;
+
+                      return (
+                        <circle
+                          cx={props.cx}
+                          cy={props.cy}
+                          r={3}
+                          fill="#16a34a"
+                          stroke="#16a34a"
+                        />
+                      );
+                    }}
+                    activeDot={{ r: 5 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -451,11 +607,55 @@ const createGrid = {
   gap: 10,
 };
 
-const graphPlaceholder = {
+const graphCard = {
   background: "white",
   borderRadius: 14,
-  minHeight: 220,
+  minHeight: 260,
+  padding: 16,
   boxShadow: "0 10px 30px rgba(0,0,0,0.08)",
+};
+
+const graphHeaderRow = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 12,
+  flexWrap: "wrap",
+};
+
+const graphTitle = {
+  color: "#111827",
+  fontSize: 18,
+  fontWeight: 700,
+};
+
+const graphToggleGroup = {
+  display: "inline-flex",
+  gap: 8,
+  alignItems: "center",
+};
+
+const graphToggleBtn = {
+  border: "1px solid #d1d5db",
+  background: "white",
+  color: "#374151",
+  borderRadius: 999,
+  padding: "6px 12px",
+  fontSize: 12,
+  fontWeight: 700,
+  cursor: "pointer",
+};
+
+const graphToggleBtnActive = {
+  background: "#166534",
+  borderColor: "#166534",
+  color: "white",
+};
+
+const graphInner = {
+  width: "100%",
+  height: 200,
+  marginTop: 12,
 };
 
 const bugsCard = {
