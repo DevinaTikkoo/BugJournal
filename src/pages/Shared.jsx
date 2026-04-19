@@ -874,9 +874,7 @@ export default function Shared() {
                                             Edit
                                           </button>
                                         )
-                                      ) : (
-                                        <span style={styles.readOnlyText}>Read only</span>
-                                      )}
+                                      ) : null}
                                     </div>
 
                                     <div style={styles.commentSection}>
@@ -1184,12 +1182,6 @@ const styles = {
     backgroundColor: "#26a036",
     color: "#fff",
     fontWeight: 700,
-  },
-  readOnlyText: {
-    margin: 0,
-    color: "#64748b",
-    fontSize: "13px",
-    fontWeight: 600,
   },
   inlineStatus: {
     margin: 0,

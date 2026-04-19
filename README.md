@@ -15,13 +15,17 @@ The React Compiler is not enabled on this template because of its impact on dev 
 
 If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
 
-## Google reCAPTCHA setup
+## hCaptcha setup
 
 Add this variable to your `.env` file for local development:
 
-VITE_RECAPTCHA_SITE_KEY=your_site_key_here
+VITE_HCAPTCHA_SITE_KEY=your_site_key_here
 
-This key is required by the login and signup forms before they can submit.
+This key is required by the login, signup, and forgot-password forms before they can submit.
+
+In the Supabase Dashboard, enable CAPTCHA protection under Auth settings and add your hCaptcha secret there.
+
+The app sends the CAPTCHA token directly to Supabase in `signInWithPassword`, `signUp`, and `resetPasswordForEmail`, so there is no custom Edge Function to deploy.
 
 ## Shared Entry Comments Setup
 

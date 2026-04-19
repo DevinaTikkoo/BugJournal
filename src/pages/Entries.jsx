@@ -21,10 +21,6 @@ export default function Entries() {
   const [createFormData, setCreateFormData] = useState({ ...emptyEntryForm });
   const [createStatus, setCreateStatus] = useState("");
   const [createSaving, setCreateSaving] = useState(false);
-  const [isSelectionMode, setIsSelectionMode] = useState(false);
-  const [selectedEntryIds, setSelectedEntryIds] = useState([]);
-  const [bulkDeleting, setBulkDeleting] = useState(false);
-  const [bulkStatus, setBulkStatus] = useState("");
   const [deletingEntryId, setDeletingEntryId] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [sortOption, setSortOption] = useState("newest");
@@ -235,66 +231,6 @@ export default function Entries() {
     setIsCreatingEntry(false);
   }
 
-  function toggleEntrySelection(entryId) {
-    if (!isSelectionMode) return;
-
-    setSelectedEntryIds((prev) =>
-      prev.includes(entryId) ? prev.filter((id) => id !== entryId) : [...prev, entryId]
-    );
-  }
-
-  function startSelectionMode() {
-    setBulkStatus("");
-    setIsSelectionMode(true);
-  }
-
-  function cancelSelectionMode() {
-    setIsSelectionMode(false);
-    setSelectedEntryIds([]);
-    setBulkStatus("");
-  }
-
-  async function deleteSelectedEntries() {
-    if (selectedEntryIds.length === 0) return;
-
-    const confirmDelete = window.confirm(
-      `Delete ${selectedEntryIds.length} selected entr${selectedEntryIds.length === 1 ? "y" : "ies"}?`
-    );
-    if (!confirmDelete) return;
-
-    setBulkStatus("");
-    setBulkDeleting(true);
-
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
-
-    if (userError || !user) {
-      setBulkStatus("You must be logged in to delete entries.");
-      setBulkDeleting(false);
-      return;
-    }
-
-    const { error } = await supabase
-      .from("bug_entries")
-      .delete()
-      .eq("user_id", user.id)
-      .in("id", selectedEntryIds);
-
-    if (error) {
-      setBulkStatus(`Error: ${error.message}`);
-      setBulkDeleting(false);
-      return;
-    }
-
-    setEntries((prev) => prev.filter((entry) => !selectedEntryIds.includes(entry.id)));
-    setSelectedEntryIds([]);
-    setIsSelectionMode(false);
-    setBulkStatus("Selected entries deleted.");
-    setBulkDeleting(false);
-  }
-
   async function deleteEntry(entryId) {
     const confirmDelete = window.confirm("Delete this entry?");
     if (!confirmDelete) return;
@@ -325,7 +261,6 @@ export default function Entries() {
     }
 
     setEntries((prev) => prev.filter((entry) => entry.id !== entryId));
-    setSelectedEntryIds((prev) => prev.filter((id) => id !== entryId));
     setExpandedEntries((prev) => {
       const next = { ...prev };
       delete next[entryId];
@@ -527,40 +462,6 @@ export default function Entries() {
             </div>
           </div>
 
-          <div style={styles.filterShell}>
-            {!isSelectionMode ? (
-              <button
-                type="button"
-                onClick={startSelectionMode}
-                style={styles.selectionPrimaryBtn}
-              >
-                Select
-              </button>
-            ) : (
-              <>
-                <p style={styles.selectionText}>Selected: {selectedEntryIds.length}</p>
-                <div style={styles.selectionActionsInline}>
-                  <button
-                    type="button"
-                    onClick={deleteSelectedEntries}
-                    style={styles.selectionDeleteBtn}
-                    disabled={selectedEntryIds.length === 0 || bulkDeleting}
-                  >
-                    {bulkDeleting ? "Deleting..." : "Delete"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={cancelSelectionMode}
-                    style={styles.selectionSecondaryBtn}
-                    disabled={bulkDeleting}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </>
-            )}
-            {bulkStatus && <p style={styles.bulkStatus}>{bulkStatus}</p>}
-          </div>
         </aside>
 
         <section style={styles.entriesColumn}>
@@ -721,7 +622,6 @@ export default function Entries() {
                           {repoEntries.map((entry) => {
                             const isEntryExpanded = !!expandedEntries[entry.id];
                             const isEditingEntry = editingEntryId === entry.id;
-                            const isSelected = selectedEntryIds.includes(entry.id);
 
                             return (
                               <div key={entry.id} style={styles.entryShell}>
@@ -736,17 +636,6 @@ export default function Entries() {
                                   </div>
 
                                   <div style={styles.entryHeaderActions}>
-                                    {isSelectionMode && (
-                                      <label style={styles.selectCheckWrap}>
-                                        <input
-                                          type="checkbox"
-                                          checked={isSelected}
-                                          onChange={() => toggleEntrySelection(entry.id)}
-                                        />
-                                        Select
-                                      </label>
-                                    )}
-
                                     <button
                                       onClick={() => toggleEntry(entry.id)}
                                       style={styles.entryToggleButton}

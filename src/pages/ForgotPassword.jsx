@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import HCaptcha from "@hcaptcha/react-hcaptcha";
 import { supabase } from "../supabaseClient";
 import bugBlotzLogo from "../components/BugBlotzLogo.png";
 
@@ -10,11 +11,19 @@ export default function ForgotPassword() {
   const [identifier, setIdentifier] = useState(""); // username OR email
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [hcaptchaToken, setHcaptchaToken] = useState("");
 
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
+  const hcaptchaRef = useRef(null);
+  const hcaptchaSiteKey = import.meta.env.VITE_HCAPTCHA_SITE_KEY;
 
   const navigate = useNavigate();
+
+  function resetCaptcha() {
+    hcaptchaRef.current?.resetCaptcha();
+    setHcaptchaToken("");
+  }
 
   // When user clicks the email link and returns, Supabase creates a recovery session.
   // We detect that and swap to the reset UI on the same page.
@@ -44,6 +53,17 @@ export default function ForgotPassword() {
   async function handleSendLink(e) {
     e.preventDefault();
     setStatus("");
+
+    if (!hcaptchaSiteKey) {
+      setStatus("hCaptcha is not configured. Add VITE_HCAPTCHA_SITE_KEY to your environment.");
+      return;
+    }
+
+    if (!hcaptchaToken) {
+      setStatus("Please complete the hCaptcha challenge.");
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -70,14 +90,17 @@ export default function ForgotPassword() {
 
       const { error } = await supabase.auth.resetPasswordForEmail(emailToUse, {
         redirectTo: `${window.location.origin}/forgot-password`,
+        captchaToken: hcaptchaToken,
       });
 
       if (error) throw error;
 
       setStep("emailSent");
       setStatus("Check your email for a reset link. Keep this tab open.");
+      resetCaptcha();
     } catch (err) {
       setStatus(`Error: ${err?.message || "Failed to send reset link."}`);
+      resetCaptcha();
     } finally {
       setLoading(false);
     }
@@ -127,6 +150,19 @@ export default function ForgotPassword() {
             autoComplete="username"
             disabled={step === "emailSent"}
           />
+
+          <div style={captchaWrap}>
+            <HCaptcha
+              ref={hcaptchaRef}
+              sitekey={hcaptchaSiteKey || ""}
+              onVerify={(token) => {
+                setHcaptchaToken(token || "");
+                if (status) setStatus("");
+              }}
+              onExpire={() => setHcaptchaToken("")}
+              onError={() => setStatus("hCaptcha failed to load. Please refresh and try again.")}
+            />
+          </div>
 
           <button
             type="submit"
@@ -252,6 +288,11 @@ const fieldLabel = {
   color: "#444",
   fontWeight: 600,
   fontSize: 13,
+};
+
+const captchaWrap = {
+  display: "flex",
+  justifyContent: "center",
 };
 
 const linkStyle = {

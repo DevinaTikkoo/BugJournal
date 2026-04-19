@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-// import ReCAPTCHA from "react-google-recaptcha";
+import HCaptcha from "@hcaptcha/react-hcaptcha";
 import { supabase } from "../supabaseClient";
 import bugBlotzLogo from "../components/BugBlotzLogo.png";
 
@@ -9,12 +9,17 @@ export default function Signup() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  // const [recaptchaToken, setRecaptchaToken] = useState("");
+  const [hcaptchaToken, setHcaptchaToken] = useState("");
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
-  // const recaptchaRef = useRef(null);
+  const hcaptchaRef = useRef(null);
   const navigate = useNavigate();
-  // const recaptchaSiteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY;
+  const hcaptchaSiteKey = import.meta.env.VITE_HCAPTCHA_SITE_KEY;
+
+  function resetCaptcha() {
+    hcaptchaRef.current?.resetCaptcha();
+    setHcaptchaToken("");
+  }
 
   async function handleSignup(e) {
     e.preventDefault();
@@ -33,16 +38,15 @@ export default function Signup() {
       return;
     }
 
-    // Temporarily disabled reCAPTCHA checks.
-    // if (!recaptchaSiteKey) {
-    //   setStatus("reCAPTCHA is not configured. Add VITE_RECAPTCHA_SITE_KEY to your environment.");
-    //   return;
-    // }
+    if (!hcaptchaSiteKey) {
+      setStatus("hCaptcha is not configured. Add VITE_HCAPTCHA_SITE_KEY to your environment.");
+      return;
+    }
 
-    // if (!recaptchaToken) {
-    //   setStatus("Please complete the reCAPTCHA challenge.");
-    //   return;
-    // }
+    if (!hcaptchaToken) {
+      setStatus("Please complete the hCaptcha challenge.");
+      return;
+    }
 
     setLoading(true);
     setStatus("Creating account...");
@@ -67,6 +71,7 @@ export default function Signup() {
         password,
         options: {
           data: { username: cleanUsername },
+          captchaToken: hcaptchaToken,
         },
       });
 
@@ -74,17 +79,16 @@ export default function Signup() {
 
       if (!data.session) {
         setStatus("Success! Check your email to confirm your account.");
-        // recaptchaRef.current?.reset();
-        // setRecaptchaToken("");
+        resetCaptcha();
         return;
       }
 
       setStatus("Success! Redirecting...");
-      // recaptchaRef.current?.reset();
-      // setRecaptchaToken("");
+      resetCaptcha();
       navigate("/dashboard");
     } catch (err) {
       setStatus(`Error: ${err?.message || "Signup failed."}`);
+      resetCaptcha();
     } finally {
       setLoading(false);
     }
@@ -124,6 +128,19 @@ export default function Signup() {
           autoComplete="new-password"
         />
 
+        <div style={captchaWrap}>
+          <HCaptcha
+            ref={hcaptchaRef}
+            sitekey={hcaptchaSiteKey || ""}
+            onVerify={(token) => {
+              setHcaptchaToken(token || "");
+              if (status) setStatus("");
+            }}
+            onExpire={() => setHcaptchaToken("")}
+            onError={() => setStatus("hCaptcha failed to load. Please refresh and try again.")}
+          />
+        </div>
+
         <label style={{ ...fieldLabel, marginTop: 4 }}>Confirm Password</label>
         <input
           style={inputStyle}
@@ -134,19 +151,6 @@ export default function Signup() {
           required
           autoComplete="new-password"
         />
-
-        {/* <div style={captchaWrap}>
-          <ReCAPTCHA
-            ref={recaptchaRef}
-            sitekey={recaptchaSiteKey || ""}
-            onChange={(token) => {
-              setRecaptchaToken(token || "");
-              if (status) setStatus("");
-            }}
-            onExpired={() => setRecaptchaToken("")}
-            onErrored={() => setStatus("reCAPTCHA failed to load. Please refresh and try again.")}
-          />
-        </div> */}
 
         <button
           type="submit"
@@ -227,4 +231,9 @@ const fieldLabel = {
   color: "#444",
   fontWeight: 600,
   fontSize: 13,
+};
+
+const captchaWrap = {
+  display: "flex",
+  justifyContent: "center",
 };

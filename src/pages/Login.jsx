@@ -1,33 +1,37 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-// import ReCAPTCHA from "react-google-recaptcha";
+import HCaptcha from "@hcaptcha/react-hcaptcha";
 import { supabase } from "../supabaseClient";
 import bugBlotzLogo from "../components/BugBlotzLogo.png";
 
 export default function Login() {
   const [identifier, setIdentifier] = useState(""); // username OR email
   const [password, setPassword] = useState("");
-  // const [recaptchaToken, setRecaptchaToken] = useState("");
+  const [hcaptchaToken, setHcaptchaToken] = useState("");
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
-  // const recaptchaRef = useRef(null);
+  const hcaptchaRef = useRef(null);
   const navigate = useNavigate();
-  // const recaptchaSiteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY;
+  const hcaptchaSiteKey = import.meta.env.VITE_HCAPTCHA_SITE_KEY;
+
+  function resetCaptcha() {
+    hcaptchaRef.current?.resetCaptcha();
+    setHcaptchaToken("");
+  }
 
   async function handleLogin(e) {
     e.preventDefault();
     setStatus("");
 
-    // Temporarily disabled reCAPTCHA checks.
-    // if (!recaptchaSiteKey) {
-    //   setStatus("reCAPTCHA is not configured. Add VITE_RECAPTCHA_SITE_KEY to your environment.");
-    //   return;
-    // }
+    if (!hcaptchaSiteKey) {
+      setStatus("hCaptcha is not configured. Add VITE_HCAPTCHA_SITE_KEY to your environment.");
+      return;
+    }
 
-    // if (!recaptchaToken) {
-    //   setStatus("Please complete the reCAPTCHA challenge.");
-    //   return;
-    // }
+    if (!hcaptchaToken) {
+      setStatus("Please complete the hCaptcha challenge.");
+      return;
+    }
 
     setLoading(true);
 
@@ -57,6 +61,9 @@ export default function Login() {
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
+        options: {
+          captchaToken: hcaptchaToken,
+        },
       });
 
       if (error) {
@@ -70,11 +77,11 @@ export default function Login() {
       }
 
       setStatus("Success! Redirecting...");
-      // recaptchaRef.current?.reset();
-      // setRecaptchaToken("");
+      resetCaptcha();
       navigate("/dashboard");
     } catch (err) {
       setStatus(`Error: ${err?.message || "Login failed."}`);
+      resetCaptcha();
     } finally {
       setLoading(false);
     }
@@ -108,18 +115,18 @@ export default function Login() {
           <Link to="/forgot-password" style={forgotStyle}>Forgot password?</Link>
         </div>
 
-        {/* <div style={captchaWrap}>
-          <ReCAPTCHA
-            ref={recaptchaRef}
-            sitekey={recaptchaSiteKey || ""}
-            onChange={(token) => {
-              setRecaptchaToken(token || "");
+        <div style={captchaWrap}>
+          <HCaptcha
+            ref={hcaptchaRef}
+            sitekey={hcaptchaSiteKey || ""}
+            onVerify={(token) => {
+              setHcaptchaToken(token || "");
               if (status) setStatus("");
             }}
-            onExpired={() => setRecaptchaToken("")}
-            onErrored={() => setStatus("reCAPTCHA failed to load. Please refresh and try again.")}
+            onExpire={() => setHcaptchaToken("")}
+            onError={() => setStatus("hCaptcha failed to load. Please refresh and try again.")}
           />
-        </div> */}
+        </div>
 
         <button
           type="submit"
@@ -212,6 +219,11 @@ const forgotStyle = {
   color: "#666",
   fontWeight: 500,
   fontSize: 13,
+};
+
+const captchaWrap = {
+  display: "flex",
+  justifyContent: "center",
 };
 
 const signupPrompt = {
