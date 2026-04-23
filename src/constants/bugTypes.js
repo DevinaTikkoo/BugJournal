@@ -11,3 +11,4 @@ export const BUG_TYPE_OPTIONS = [
   "Segmentation Fault",
   "Other",
 ];
+// Bug categories used in entry forms.

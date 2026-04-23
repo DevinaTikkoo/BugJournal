@@ -4,11 +4,20 @@ import { supabase } from "../supabaseClient";
 
 export default function Layout() {
   const [session, setSession] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setSession(data.session));
-    const { data: listener } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
+    const initSession = async () => {
+      const { data } = await supabase.auth.getSession();
+      setSession(data.session || null);
+      setIsLoading(false);
+    };
+    
+    initSession();
+    const { data: listener } = supabase.auth.onAuthStateChange((_e, s) => {
+      setSession(s || null);
+    });
     return () => listener.subscription.unsubscribe();
   }, []);
 
@@ -35,9 +44,7 @@ export default function Layout() {
               <button onClick={handleLogout} style={btnStyle}>Logout</button>
             </>
           ) : (
-            <>
-              <Link to="/login" style={linkStyle}>Log In</Link>
-            </>
+            <Link to="/login" style={linkStyle}>Log In</Link>
           )}
         </div>
       </div>

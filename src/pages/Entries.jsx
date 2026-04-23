@@ -40,7 +40,7 @@ export default function Entries() {
     } = await supabase.auth.getUser();
 
     if (userError || !user) {
-      console.error("User fetch error:", userError);
+      console.error("Could not load user session:", userError);
       setLoading(false);
       return;
     }
@@ -51,7 +51,7 @@ export default function Entries() {
       .eq("user_id", user.id);
 
     if (error) {
-      console.error("Error fetching entries:", error);
+      console.error("Could not load entries:", error);
     } else {
       setEntries(data || []);
     }
@@ -111,9 +111,9 @@ export default function Entries() {
 
     setInlineStatus("");
 
-    const validationError = validateEntryForm(inlineFormData);
-    if (validationError) {
-      setInlineStatus(validationError);
+    const formIssue = validateEntryForm(inlineFormData);
+    if (formIssue) {
+      setInlineStatus(formIssue);
       return;
     }
 
@@ -125,7 +125,7 @@ export default function Entries() {
     } = await supabase.auth.getUser();
 
     if (userError || !user) {
-      setInlineStatus("You must be logged in to edit this entry.");
+      setInlineStatus("Please log in to edit this entry.");
       setInlineSaving(false);
       return;
     }
@@ -139,7 +139,7 @@ export default function Entries() {
       .single();
 
     if (error) {
-      setInlineStatus(`Error: ${error.message}`);
+      setInlineStatus(`Could not update entry: ${error.message}`);
       setInlineSaving(false);
       return;
     }
@@ -178,9 +178,9 @@ export default function Entries() {
   async function saveInlineCreate() {
     setCreateStatus("");
 
-    const validationError = validateEntryForm(createFormData);
-    if (validationError) {
-      setCreateStatus(validationError);
+    const formIssue = validateEntryForm(createFormData);
+    if (formIssue) {
+      setCreateStatus(formIssue);
       return;
     }
 
@@ -192,7 +192,7 @@ export default function Entries() {
     } = await supabase.auth.getUser();
 
     if (userError || !user) {
-      setCreateStatus("You must be logged in to create an entry.");
+      setCreateStatus("Please log in before creating an entry.");
       setCreateSaving(false);
       return;
     }
@@ -209,7 +209,7 @@ export default function Entries() {
       .single();
 
     if (error) {
-      setCreateStatus(`Error: ${error.message}`);
+      setCreateStatus(`Could not save entry: ${error.message}`);
       setCreateSaving(false);
       return;
     }
@@ -244,7 +244,7 @@ export default function Entries() {
 
     if (userError || !user) {
       setDeletingEntryId(null);
-      window.alert("You must be logged in to delete this entry.");
+      window.alert("Please log in to delete this entry.");
       return;
     }
 
@@ -256,7 +256,7 @@ export default function Entries() {
 
     if (error) {
       setDeletingEntryId(null);
-      window.alert(`Error: ${error.message}`);
+      window.alert(`Could not delete entry: ${error.message}`);
       return;
     }
 
@@ -612,8 +612,9 @@ export default function Entries() {
                           onClick={() => toggleRepo(repoName)}
                           style={styles.expandButton}
                           type="button"
+                          aria-label={isRepoExpanded ? "Collapse repository" : "Expand repository"}
                         >
-                          {isRepoExpanded ? "Hide" : "Show"}
+                          <ChevronIcon expanded={isRepoExpanded} />
                         </button>
                       </div>
 
@@ -640,8 +641,9 @@ export default function Entries() {
                                       onClick={() => toggleEntry(entry.id)}
                                       style={styles.entryToggleButton}
                                       type="button"
+                                      aria-label={isEntryExpanded ? "Collapse entry" : "Expand entry"}
                                     >
-                                      {isEntryExpanded ? "Hide" : "Show"}
+                                      <ChevronIcon expanded={isEntryExpanded} />
                                     </button>
                                   </div>
                                 </div>
@@ -837,6 +839,26 @@ export default function Entries() {
   );
 }
 
+function ChevronIcon({ expanded }) {
+  return (
+    <span
+      aria-hidden="true"
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        transform: expanded ? "rotate(180deg)" : "rotate(0deg)",
+        transition: "transform 120ms ease",
+        lineHeight: 0,
+      }}
+    >
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M6 9L12 15L18 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </span>
+  );
+}
+
 const styles = {
   page: {
     padding: "24px",
@@ -951,12 +973,20 @@ const styles = {
     fontSize: "14px",
   },
   expandButton: {
-    padding: "8px 14px",
+    width: "34px",
+    height: "34px",
+    padding: 0,
     borderRadius: "8px",
     border: "none",
     cursor: "pointer",
-    backgroundColor: "#222",
+    backgroundColor: "#5b2ca5",
     color: "#fff",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: "18px",
+    lineHeight: 1,
+    fontWeight: 600,
   },
   entryList: {
     padding: "16px",
@@ -1000,12 +1030,19 @@ const styles = {
     color: "#555",
   },
   entryToggleButton: {
-    padding: "8px 12px",
+    width: "34px",
+    height: "34px",
+    padding: 0,
     borderRadius: "8px",
     border: "1px solid #cbd5e1",
     cursor: "pointer",
     backgroundColor: "#fff",
     color: "#1f2937",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: "18px",
+    lineHeight: 1,
     fontWeight: 600,
   },
   entryMetaBlock: {
@@ -1103,7 +1140,7 @@ const styles = {
     borderRadius: "8px",
     padding: "10px 14px",
     cursor: "pointer",
-    backgroundColor: "#b91c1c",
+    backgroundColor: "#5b2ca5",
     color: "#fff",
     fontWeight: 700,
   },
@@ -1147,7 +1184,7 @@ const styles = {
     borderRadius: "8px",
     padding: "10px 12px",
     cursor: "pointer",
-    backgroundColor: "#26a036",
+    backgroundColor: "#5b2ca5",
     color: "#fff",
     fontWeight: 700,
   },

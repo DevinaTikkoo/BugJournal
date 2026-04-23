@@ -3,7 +3,7 @@ export default function Settings() {
     <div style={wrapStyle}>
       <div style={cardStyle}>
         <h1 style={titleStyle}>Settings</h1>
-        <p style={textStyle}>This page is coming soon.</p>
+        <p style={textStyle}>Settings are not part of this submission build.</p>
       </div>
     </div>
   );

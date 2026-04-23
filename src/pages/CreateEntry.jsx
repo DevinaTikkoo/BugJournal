@@ -28,9 +28,9 @@ export default function CreateEntry() {
     e.preventDefault();
     setStatus("");
 
-    const validationError = validateEntryForm(formData);
-    if (validationError) {
-      setStatus(validationError);
+    const formIssue = validateEntryForm(formData);
+    if (formIssue) {
+      setStatus(formIssue);
       return;
     }
 
@@ -43,7 +43,7 @@ export default function CreateEntry() {
       } = await supabase.auth.getUser();
 
       if (userError || !user) {
-        setStatus("You must be logged in to create an entry.");
+        setStatus("Please log in before creating an entry.");
         setLoading(false);
         return;
       }
@@ -56,18 +56,18 @@ export default function CreateEntry() {
       ]);
 
       if (error) {
-        setStatus(`Error: ${error.message}`);
+        setStatus(`Could not save entry: ${error.message}`);
         setLoading(false);
         return;
       }
 
-      setStatus("Entry created successfully!");
+      setStatus("Entry saved.");
 
       setFormData({ ...emptyEntryForm });
 
       navigate("/dashboard");
     } catch (err) {
-      setStatus("Something went wrong while creating the entry.");
+      setStatus("Something went wrong while saving this entry.");
     }
 
     setLoading(false);

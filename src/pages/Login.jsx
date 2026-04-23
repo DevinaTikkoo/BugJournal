@@ -5,7 +5,7 @@ import { supabase } from "../supabaseClient";
 import bugBlotzLogo from "../components/BugBlotzLogo.png";
 
 export default function Login() {
-  const [identifier, setIdentifier] = useState(""); // username OR email
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [hcaptchaToken, setHcaptchaToken] = useState("");
   const [status, setStatus] = useState("");
@@ -24,7 +24,7 @@ export default function Login() {
     setStatus("");
 
     if (!hcaptchaSiteKey) {
-      setStatus("hCaptcha is not configured. Add VITE_HCAPTCHA_SITE_KEY to your environment.");
+      setStatus("Security check is unavailable right now.");
       return;
     }
 
@@ -36,22 +36,21 @@ export default function Login() {
     setLoading(true);
 
     try {
-      const raw = identifier.trim();
-      const id = raw.toLowerCase();
+      const normalizedIdentifier = identifier.trim().toLowerCase();
 
-      let email = id;
+      let email = normalizedIdentifier;
 
-      // If not an email, treat as username
-      if (!id.includes("@")) {
+      // If it's not an email, look it up as a username.
+      if (!normalizedIdentifier.includes("@")) {
         const { data, error } = await supabase
           .from("profiles")
           .select("email")
-          .eq("username", id)
+          .eq("username", normalizedIdentifier)
           .maybeSingle();
 
         if (error) throw error;
         if (!data?.email) {
-          setStatus("Username not found.");
+          setStatus("We couldn't find that username.");
           return;
         }
 
@@ -67,20 +66,20 @@ export default function Login() {
       });
 
       if (error) {
-        setStatus(`Error: ${error.message}`);
+        setStatus(`Could not log in: ${error.message}`);
         return;
       }
 
       if (!data?.session) {
-        setStatus("Signed in, but no session found. Check email confirmation settings.");
+        setStatus("Signed in, but no active session was returned.");
         return;
       }
 
-      setStatus("Success! Redirecting...");
+      setStatus("You're in. Taking you to your dashboard...");
       resetCaptcha();
       navigate("/dashboard");
     } catch (err) {
-      setStatus(`Error: ${err?.message || "Login failed."}`);
+      setStatus(`Could not log in: ${err?.message || "Please try again."}`);
       resetCaptcha();
     } finally {
       setLoading(false);
@@ -177,7 +176,7 @@ function CenterCard({ title, children, logoSrc }) {
           background: "white",
           padding: 24,
           borderRadius: 14,
-          marginTop: -250,
+          marginTop: -150,
           boxShadow: "0 10px 30px rgba(0,0,0,0.08)",
         }}
       >

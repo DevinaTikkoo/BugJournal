@@ -67,9 +67,9 @@ export default function EntryView() {
   async function saveEntry() {
     setStatus("");
 
-    const validationError = validateEntryForm(formData);
-    if (validationError) {
-      setStatus(validationError);
+    const formIssue = validateEntryForm(formData);
+    if (formIssue) {
+      setStatus(formIssue);
       return;
     }
 
@@ -81,7 +81,7 @@ export default function EntryView() {
     } = await supabase.auth.getUser();
 
     if (userError || !user) {
-      setStatus("You must be logged in to update this entry.");
+      setStatus("Please log in to update this entry.");
       setSaving(false);
       return;
     }
@@ -97,7 +97,7 @@ export default function EntryView() {
       .single();
 
     if (error) {
-      setStatus(`Error: ${error.message}`);
+      setStatus(`Could not update entry: ${error.message}`);
       setSaving(false);
       return;
     }
@@ -105,7 +105,7 @@ export default function EntryView() {
     setEntry(data);
     setFormData(toEntryFormData(data));
     setIsEditing(false);
-    setStatus("Entry updated successfully!");
+    setStatus("Entry updated.");
     setSaving(false);
   }
 
@@ -127,7 +127,7 @@ export default function EntryView() {
     } = await supabase.auth.getUser();
 
     if (userError || !user) {
-      setStatus("You must be logged in to delete this entry.");
+      setStatus("Please log in to delete this entry.");
       return;
     }
 
@@ -138,7 +138,7 @@ export default function EntryView() {
       .eq("user_id", user.id);
 
     if (error) {
-      setStatus("Error deleting entry.");
+      setStatus("Could not delete entry.");
       return;
     }
 
@@ -427,7 +427,7 @@ const styles = {
     padding: "12px 16px",
     border: "none",
     borderRadius: 10,
-    backgroundColor: "rgb(97, 37, 169)",
+    backgroundColor: "#5b2ca5",
     color: "white",
     fontWeight: 700,
     fontSize: 15,

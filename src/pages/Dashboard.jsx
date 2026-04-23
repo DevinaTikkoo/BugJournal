@@ -136,9 +136,9 @@ export default function Dashboard() {
   async function saveInlineCreate() {
     setCreateStatus("");
 
-    const validationError = validateEntryForm(createFormData);
-    if (validationError) {
-      setCreateStatus(validationError);
+    const formIssue = validateEntryForm(createFormData);
+    if (formIssue) {
+      setCreateStatus(formIssue);
       return;
     }
 
@@ -150,7 +150,7 @@ export default function Dashboard() {
     } = await supabase.auth.getUser();
 
     if (userError || !user) {
-      setCreateStatus("You must be logged in to create an entry.");
+      setCreateStatus("Please log in before creating an entry.");
       setCreateSaving(false);
       return;
     }
@@ -169,7 +169,7 @@ export default function Dashboard() {
       .single();
 
     if (error) {
-      setCreateStatus(`Error: ${error.message}`);
+      setCreateStatus(`Could not save entry: ${error.message}`);
       setCreateSaving(false);
       return;
     }
@@ -188,7 +188,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     (async () => {
-      // 1) Require auth
+      // Redirect to login if there is no active user.
       const { data: userRes } = await supabase.auth.getUser();
       const user = userRes?.user;
 
@@ -197,7 +197,7 @@ export default function Dashboard() {
         return;
       }
 
-      // 2) Get username from profiles
+      // Load username for the greeting card.
       const { data: profile, error: profileErr } = await supabase
         .from("profiles")
         .select("username")
@@ -206,7 +206,7 @@ export default function Dashboard() {
 
       if (!profileErr && profile?.username) setUsername(profile.username);
 
-      // 3) Get entries for the logged-in user
+      // Load the user's entries for list and chart views.
       const { data: bugEntries, error: entriesErr } = await supabase
         .from("bug_entries")
         .select(
@@ -252,8 +252,9 @@ export default function Dashboard() {
                         onClick={() => toggleEntry(e.id)}
                         style={toggleBtn}
                         type="button"
+                        aria-label={expandedEntries[e.id] ? "Collapse entry" : "Expand entry"}
                       >
-                        {expandedEntries[e.id] ? "Hide" : "Show"}
+                        <ChevronIcon expanded={!!expandedEntries[e.id]} />
                       </button>
                     </div>
 
@@ -475,13 +476,16 @@ export default function Dashboard() {
                     tick={{ fontSize: 12, fill: "#6b7280" }}
                     tickLine={false}
                     axisLine={{ stroke: "#d1d5db" }}
+                    width={56}
                   >
                     <Label
-                      value="Number of Bugs Reported"
+                      value="Number of Bugs"
                       angle={-90}
                       position="insideLeft"
-                      offset={2}
+                      offset={4}
+                      dy={38}
                       fill="#374151"
+                      style={{ fontSize: 14, fontWeight: 400 }}
                     />
                   </YAxis>
                   <Tooltip
@@ -515,6 +519,26 @@ export default function Dashboard() {
         </div>
       </div>
     </div>
+  );
+}
+
+function ChevronIcon({ expanded }) {
+  return (
+    <span
+      aria-hidden="true"
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        transform: expanded ? "rotate(180deg)" : "rotate(0deg)",
+        transition: "transform 120ms ease",
+        lineHeight: 0,
+      }}
+    >
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M6 9L12 15L18 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </span>
   );
 }
 
@@ -735,10 +759,16 @@ const toggleBtn = {
   border: "1px solid #c5cad3",
   background: "white",
   borderRadius: 10,
-  padding: "8px 12px",
+  width: 34,
+  height: 34,
+  padding: 0,
   cursor: "pointer",
-  fontSize: 13,
-  fontWeight: 700,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  fontSize: 18,
+  lineHeight: 1,
+  fontWeight: 600,
   color: "#2d3748",
 };
 

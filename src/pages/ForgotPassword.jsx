@@ -5,10 +5,10 @@ import { supabase } from "../supabaseClient";
 import bugBlotzLogo from "../components/BugBlotzLogo.png";
 
 export default function ForgotPassword() {
-  // Step state: "request" (send email) -> "emailSent" -> "reset" (has recovery session)
+  // Flow: request reset link -> email sent -> password reset form.
   const [step, setStep] = useState("request");
 
-  const [identifier, setIdentifier] = useState(""); // username OR email
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [hcaptchaToken, setHcaptchaToken] = useState("");
@@ -25,19 +25,17 @@ export default function ForgotPassword() {
     setHcaptchaToken("");
   }
 
-  // When user clicks the email link and returns, Supabase creates a recovery session.
-  // We detect that and swap to the reset UI on the same page.
+  // If the recovery link was used, Supabase gives us a recovery session.
   useEffect(() => {
     (async () => {
       const { data } = await supabase.auth.getSession();
       if (data?.session) {
-        // If a session exists here, it's often the recovery session from the link.
         setStep("reset");
         setStatus("");
       }
     })();
 
-    // Also listen for auth state changes (more reliable across browsers)
+    // Listen for auth events in case the browser handles recovery differently.
     const { data: sub } = supabase.auth.onAuthStateChange((event) => {
       if (event === "PASSWORD_RECOVERY" || event === "SIGNED_IN") {
         setStep("reset");
@@ -55,7 +53,7 @@ export default function ForgotPassword() {
     setStatus("");
 
     if (!hcaptchaSiteKey) {
-      setStatus("hCaptcha is not configured. Add VITE_HCAPTCHA_SITE_KEY to your environment.");
+      setStatus("Security check is unavailable right now.");
       return;
     }
 
@@ -67,22 +65,22 @@ export default function ForgotPassword() {
     setLoading(true);
 
     try {
-      const id = identifier.trim().toLowerCase();
-      if (!id) throw new Error("Enter your email or username.");
+      const normalizedIdentifier = identifier.trim().toLowerCase();
+      if (!normalizedIdentifier) throw new Error("Enter your email or username.");
 
-      let emailToUse = id;
+      let emailToUse = normalizedIdentifier;
 
-      // If it's a username, lookup email in profiles (MVP behavior)
-      if (!id.includes("@")) {
+      // If it's a username, look up the account email.
+      if (!normalizedIdentifier.includes("@")) {
         const { data, error } = await supabase
           .from("profiles")
           .select("email")
-          .eq("username", id)
+          .eq("username", normalizedIdentifier)
           .maybeSingle();
 
         if (error) throw error;
         if (!data?.email) {
-          setStatus("Username not found.");
+          setStatus("We couldn't find that username.");
           return;
         }
         emailToUse = data.email.toLowerCase();
@@ -96,10 +94,10 @@ export default function ForgotPassword() {
       if (error) throw error;
 
       setStep("emailSent");
-      setStatus("Check your email for a reset link. Keep this tab open.");
+      setStatus("Reset link sent. Keep this tab open after you click it.");
       resetCaptcha();
     } catch (err) {
-      setStatus(`Error: ${err?.message || "Failed to send reset link."}`);
+      setStatus(`Could not send reset link: ${err?.message || "Please try again."}`);
       resetCaptcha();
     } finally {
       setLoading(false);
@@ -117,20 +115,20 @@ export default function ForgotPassword() {
         return;
       }
       if (password.length < 6) {
-        setStatus("Password must be at least 8 characters.");
+        setStatus("Password must be at least 6 characters.");
         return;
       }
 
       const { error } = await supabase.auth.updateUser({ password });
       if (error) throw error;
 
-      setStatus("Password updated! Redirecting to login...");
+      setStatus("Password updated. Redirecting to login...");
 
-      // Sign out to ensure clean login after reset
+      // Sign out so the user can log in fresh with the new password.
       await supabase.auth.signOut();
       setTimeout(() => navigate("/login"), 700);
     } catch (err) {
-      setStatus(`Error: ${err?.message || "Failed to update password."}`);
+      setStatus(`Could not update password: ${err?.message || "Please try again."}`);
     } finally {
       setLoading(false);
     }
@@ -176,7 +174,7 @@ export default function ForgotPassword() {
 
           {step === "emailSent" ? (
             <div style={{ fontSize: 13, color: "#666", marginTop: 6 }}>
-              Once the link is clicked. "New Password" options will appear.
+              After you open the link, this page will show the new password form.
             </div>
           ) : null}
 

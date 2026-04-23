@@ -99,26 +99,26 @@ export default function Shared() {
 
     setCurrentUserId(user.id);
 
-    // Fetch current user's entries
+    // Load the current user's entries.
     const { data: userEntries, error: userEntriesErr } = await supabase
       .from("bug_entries")
       .select("*")
       .eq("user_id", user.id);
 
     if (userEntriesErr) {
-      console.error("Error fetching user entries:", userEntriesErr);
+      console.error("Could not load your entries:", userEntriesErr);
       setLoading(false);
       return;
     }
 
-    // Build match keys from user's repository links (fallback to repo_name)
+    // Build repo keys from user entries (fallback to repo_name).
     const userRepoKeys = new Set(
       (userEntries || [])
         .map((entry) => normalizeRepositoryKey(entry))
         .filter(Boolean)
     );
 
-    // Fetch entries from other users, then keep only those with matching repository keys
+    // Pull entries from other users, then keep only matching repos.
     let otherEntries = [];
     if (userRepoKeys.size > 0) {
       const { data: shared, error: sharedErr } = await supabase
@@ -127,7 +127,7 @@ export default function Shared() {
         .neq("user_id", user.id);
 
       if (sharedErr) {
-        console.error("Error fetching shared entries:", sharedErr);
+        console.error("Could not load shared entries:", sharedErr);
       } else {
         otherEntries = (shared || []).filter((entry) =>
           userRepoKeys.has(normalizeRepositoryKey(entry))
@@ -185,7 +185,7 @@ export default function Shared() {
       .order("created_at", { ascending: true });
 
     if (commentsErr) {
-      console.error("Error fetching comments:", commentsErr);
+      console.error("Could not load comments:", commentsErr);
       setCommentsByEntryId(initialMap);
       return;
     }
@@ -263,7 +263,7 @@ export default function Shared() {
       }));
       setCommentStatusByEntryId((prev) => ({
         ...prev,
-        [entryId]: "You must be logged in to comment.",
+        [entryId]: "Please log in to comment.",
       }));
       return;
     }
@@ -287,7 +287,7 @@ export default function Shared() {
       }));
       setCommentStatusByEntryId((prev) => ({
         ...prev,
-        [entryId]: `Error: ${insertErr?.message || "Unable to post comment."}`,
+        [entryId]: `Could not post comment: ${insertErr?.message || "Please try again."}`,
       }));
       return;
     }
@@ -375,9 +375,9 @@ export default function Shared() {
 
     setInlineStatus("");
 
-    const validationError = validateEntryForm(inlineFormData);
-    if (validationError) {
-      setInlineStatus(validationError);
+    const formIssue = validateEntryForm(inlineFormData);
+    if (formIssue) {
+      setInlineStatus(formIssue);
       return;
     }
 
@@ -389,7 +389,7 @@ export default function Shared() {
     } = await supabase.auth.getUser();
 
     if (userError || !user) {
-      setInlineStatus("You must be logged in to edit this entry.");
+      setInlineStatus("Please log in to edit this entry.");
       setInlineSaving(false);
       return;
     }
@@ -403,7 +403,7 @@ export default function Shared() {
       .single();
 
     if (error) {
-      setInlineStatus(`Error: ${error.message}`);
+      setInlineStatus(`Could not update entry: ${error.message}`);
       setInlineSaving(false);
       return;
     }
@@ -671,8 +671,9 @@ export default function Shared() {
                           onClick={() => toggleRepo(repoKey)}
                           style={styles.expandButton}
                           type="button"
+                          aria-label={isExpanded ? "Collapse repository" : "Expand repository"}
                         >
-                          {isExpanded ? "Hide" : "Show"}
+                          <ChevronIcon expanded={isExpanded} />
                         </button>
                       </div>
 
@@ -699,13 +700,22 @@ export default function Shared() {
                                     </p>
                                   </div>
 
-                                  <button
-                                    onClick={() => toggleEntry(entry.id)}
-                                    style={styles.entryToggleButton}
-                                    type="button"
-                                  >
-                                    {isEntryExpanded ? "Hide" : "Show"}
-                                  </button>
+                                  <div style={styles.entryHeaderActions}>
+                                    {entry.user_id !== currentUserId && (
+                                      <div style={styles.entryCreatorBadge}>
+                                        by {creatorNamesById[entry.user_id] || "another user"}
+                                      </div>
+                                    )}
+
+                                    <button
+                                      onClick={() => toggleEntry(entry.id)}
+                                      style={styles.entryToggleButton}
+                                      type="button"
+                                      aria-label={isEntryExpanded ? "Collapse entry" : "Expand entry"}
+                                    >
+                                      <ChevronIcon expanded={isEntryExpanded} />
+                                    </button>
+                                  </div>
                                 </div>
 
                                 {isEntryExpanded && (
@@ -949,6 +959,26 @@ export default function Shared() {
   );
 }
 
+function ChevronIcon({ expanded }) {
+  return (
+    <span
+      aria-hidden="true"
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        transform: expanded ? "rotate(180deg)" : "rotate(0deg)",
+        transition: "transform 120ms ease",
+        lineHeight: 0,
+      }}
+    >
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M6 9L12 15L18 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </span>
+  );
+}
+
 const styles = {
   page: {
     padding: "24px",
@@ -1049,12 +1079,20 @@ const styles = {
     fontSize: "14px",
   },
   expandButton: {
-    padding: "8px 14px",
+    width: "34px",
+    height: "34px",
+    padding: 0,
     borderRadius: "8px",
     border: "none",
     cursor: "pointer",
-    backgroundColor: "#222",
+    backgroundColor: "#5b2ca5",
     color: "#fff",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: "18px",
+    lineHeight: 1,
+    fontWeight: 600,
   },
   entryList: {
     padding: "16px",
@@ -1075,6 +1113,12 @@ const styles = {
     alignItems: "flex-start",
     gap: "12px",
   },
+  entryHeaderActions: {
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+    marginLeft: "auto",
+  },
   entryName: {
     margin: 0,
     fontSize: "17px",
@@ -1084,13 +1128,33 @@ const styles = {
     fontSize: "13px",
     color: "#555",
   },
+  entryCreatorBadge: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "4px 10px",
+    borderRadius: "999px",
+    backgroundColor: "#ede9fe",
+    color: "#5b2ca5",
+    fontSize: "12px",
+    fontWeight: 700,
+    lineHeight: 1,
+    width: "fit-content",
+  },
   entryToggleButton: {
-    padding: "8px 12px",
+    width: "34px",
+    height: "34px",
+    padding: 0,
     borderRadius: "8px",
     border: "1px solid #cbd5e1",
     cursor: "pointer",
     backgroundColor: "#fff",
     color: "#1f2937",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: "18px",
+    lineHeight: 1,
     fontWeight: 600,
   },
   entryMetaBlock: {

@@ -39,7 +39,7 @@ export default function Signup() {
     }
 
     if (!hcaptchaSiteKey) {
-      setStatus("hCaptcha is not configured. Add VITE_HCAPTCHA_SITE_KEY to your environment.");
+      setStatus("Security check is unavailable right now.");
       return;
     }
 
@@ -49,10 +49,10 @@ export default function Signup() {
     }
 
     setLoading(true);
-    setStatus("Creating account...");
+    setStatus("Creating your account...");
 
     try {
-      // Optional: username availability check (nice UX)
+      // Check username availability first for clearer feedback.
       const { data: existing, error: checkErr } = await supabase
         .from("profiles")
         .select("id")
@@ -65,7 +65,7 @@ export default function Signup() {
         return;
       }
 
-      // Sign up with username stored in metadata (trigger should insert into profiles)
+      // Store username in metadata; the DB trigger writes the profiles row.
       const { data, error } = await supabase.auth.signUp({
         email: cleanEmail,
         password,
@@ -78,16 +78,16 @@ export default function Signup() {
       if (error) throw error;
 
       if (!data.session) {
-        setStatus("Success! Check your email to confirm your account.");
+        setStatus("Account created. Check your email to confirm it.");
         resetCaptcha();
         return;
       }
 
-      setStatus("Success! Redirecting...");
+      setStatus("Account ready. Redirecting...");
       resetCaptcha();
       navigate("/dashboard");
     } catch (err) {
-      setStatus(`Error: ${err?.message || "Signup failed."}`);
+      setStatus(`Could not create account: ${err?.message || "Please try again."}`);
       resetCaptcha();
     } finally {
       setLoading(false);
@@ -128,6 +128,17 @@ export default function Signup() {
           autoComplete="new-password"
         />
 
+        <label style={{ ...fieldLabel, marginTop: 4 }}>Confirm Password</label>
+        <input
+          style={inputStyle}
+          placeholder="••••••••"
+          type="password"
+          value={confirmPassword}
+          onChange={(e) => setConfirmPassword(e.target.value)}
+          required
+          autoComplete="new-password"
+        />
+
         <div style={captchaWrap}>
           <HCaptcha
             ref={hcaptchaRef}
@@ -140,17 +151,6 @@ export default function Signup() {
             onError={() => setStatus("hCaptcha failed to load. Please refresh and try again.")}
           />
         </div>
-
-        <label style={{ ...fieldLabel, marginTop: 4 }}>Confirm Password</label>
-        <input
-          style={inputStyle}
-          placeholder="••••••••"
-          type="password"
-          value={confirmPassword}
-          onChange={(e) => setConfirmPassword(e.target.value)}
-          required
-          autoComplete="new-password"
-        />
 
         <button
           type="submit"
@@ -196,7 +196,7 @@ function CenterCard({ title, children, logoSrc }) {
           background: "white",
           padding: 24,
           borderRadius: 14,
-          marginTop: -150,
+          marginTop: -100,
           boxShadow: "0 10px 30px rgba(0,0,0,0.08)",
         }}
       >
